@@ -11,12 +11,14 @@ from chemprojector.chem.mol import Molecule
 from chemprojector.chem.reaction import Reaction
 from chemprojector.chem.stack import Stack
 from chemprojector.chem.featurize import (
+    BOS,
+    EOS,
     COR_END,
     COR_MOL_END,
     COR_MOL_START,
     COR_START,
-    cor_reaction_token,
-    tokenize_cor_smiles,
+    reaction_token,
+    tokenize_smiles,
 )
 from chemprojector.utils.image import draw_text, make_grid
 
@@ -29,15 +31,19 @@ class TokenType(enum.IntEnum):
 
 
 class ProjectionData(TypedDict, total=False):
+    # All
+    input_ids: torch.Tensor
+    attention_mask: torch.Tensor
+    labels: torch.Tensor
     # Encoder
     atoms: torch.Tensor
     bonds: torch.Tensor
     atom_padding_mask: torch.Tensor
     smiles: torch.Tensor
     # Decoder
-    token_types: torch.Tensor
-    rxn_indices: torch.Tensor
-    reactant_fps: torch.Tensor
+    # token_types: torch.Tensor
+    # rxn_indices: torch.Tensor
+    # reactant_fps: torch.Tensor
     token_ids: torch.Tensor
     token_padding_mask: torch.Tensor
     # Auxilliary
@@ -63,34 +69,6 @@ class ProjectionBatch(TypedDict, total=False):
 
 
 def featurize_stack_actions(
-    mol_idx_seq: Sequence[int | None],
-    rxn_idx_seq: Sequence[int | None],
-    end_token: bool,
-    fpindex: FingerprintIndex,
-) -> dict[str, torch.Tensor]:
-    seq_len = len(mol_idx_seq) + 1  # Plus START token
-    if end_token:
-        seq_len += 1
-    fp_dim = fpindex.fp_option.dim
-    feats = {
-        "token_types": torch.zeros([seq_len], dtype=torch.long),
-        "rxn_indices": torch.zeros([seq_len], dtype=torch.long),
-        "reactant_fps": torch.zeros([seq_len, fp_dim], dtype=torch.float),
-        "token_padding_mask": torch.zeros([seq_len], dtype=torch.bool),
-    }
-    feats["token_types"][0] = TokenType.START
-    for i, (mol_idx, rxn_idx) in enumerate(zip(mol_idx_seq, rxn_idx_seq), start=1):
-        if rxn_idx is not None:
-            feats["token_types"][i] = TokenType.REACTION
-            feats["rxn_indices"][i] = rxn_idx
-        elif mol_idx is not None:
-            feats["token_types"][i] = TokenType.REACTANT
-            _, mol_fp = fpindex[mol_idx]
-            feats["reactant_fps"][i] = torch.from_numpy(mol_fp)
-    return feats
-
-
-def featurize_cor_actions(
     mol_seq: Sequence[Molecule],
     rxn_idx_seq: Sequence[int | None],
     end_token: bool,
@@ -99,11 +77,11 @@ def featurize_cor_actions(
     tokens: list[int] = [COR_START]
     for mol, rxn_idx in zip(mol_seq, rxn_idx_seq):
         if rxn_idx is None:
-            tokens.extend(tokenize_cor_smiles(mol.csmiles))
+            tokens.extend(tokenize_smiles(mol.csmiles))
         else:
-            tokens.append(cor_reaction_token(rxn_idx))
+            tokens.append(reaction_token(rxn_idx))
             # If a reaction exists here, `mol` is the resulting product
-            tokens.extend(tokenize_cor_smiles(mol.csmiles))
+            tokens.extend(tokenize_smiles(mol.csmiles))
 
     if end_token:
         tokens.append(COR_END)
@@ -127,49 +105,41 @@ def featurize_stack(stack: Stack, end_token: bool, fpindex: FingerprintIndex) ->
 def create_data(
     product: Molecule,
     mol_seq: Sequence[Molecule],
-    mol_idx_seq: Sequence[int | None],
     rxn_seq: Sequence[Reaction | None],
     rxn_idx_seq: Sequence[int | None],
-    fpindex: FingerprintIndex,
-):
-    atom_f, bond_f = product.featurize_simple()
-    stack_feats = featurize_stack_actions(
-        mol_idx_seq=mol_idx_seq,
-        rxn_idx_seq=rxn_idx_seq,
-        end_token=True,
-        fpindex=fpindex,
-    )
-
-    data: "ProjectionData" = {
-        "mol_seq": mol_seq,
-        "rxn_seq": rxn_seq,
-        "atoms": atom_f,
-        "bonds": bond_f,
-        "smiles": product.tokenize_csmiles(),
-        "atom_padding_mask": torch.zeros([atom_f.size(0)], dtype=torch.bool),
-        "token_types": stack_feats["token_types"],
-        "rxn_indices": stack_feats["rxn_indices"],
-        "reactant_fps": stack_feats["reactant_fps"],
-        "token_padding_mask": stack_feats["token_padding_mask"],
-    }
-    return data
-
-
-def create_cor_data(
-    product: Molecule,
-    mol_seq: Sequence[Molecule],
-    rxn_seq: Sequence[Reaction | None],
-    rxn_idx_seq: Sequence[int | None],
+    max_input_len: int,
+    max_output_len: int,
 ):
     """Create training data using chain-of-reaction notation."""
     atom_f, bond_f = product.featurize_simple()
-    stack_feats = featurize_cor_actions(
+    stack_feats = featurize_stack_actions(
         mol_seq=mol_seq,
         rxn_idx_seq=rxn_idx_seq,
         end_token=True,
     )
 
+    input_tokens = [BOS] + product.tokenize_csmiles()
+    if len(input_tokens) > max_input_len: # truncate left
+        input_tokens = input_tokens[-max_input_len:]
+    if len(input_tokens) < max_input_len: # pad left
+        input_tokens = [PAD] * (max_input_len - len(input_tokens)) + input_tokens
+    input_tokens = torch.tensor(input_tokens, dtype=torch.long)
+
+    output_tokens = stack_feats["token_ids"] + [EOS]
+    if len(output_tokens) > max_output_len: # truncate right
+        output_tokens = output_tokens[:max_output_len]
+    if len(output_tokens) < max_output_len: # pad right
+        output_tokens = output_tokens + [PAD] * (max_output_len - len(output_tokens))
+    output_tokens = torch.tensor(output_tokens, dtype=torch.long)
+
+    input_ids = torch.cat([input_tokens, output_tokens], dim=0)
+    attention_mask = (input_ids != PAD).to(torch.long)
+    labels = torch.cat([-100 * torch.ones_like(input_tokens), torch.where(output_tokens == PAD, -100, output_tokens)])
+
     data: "ProjectionData" = {
+        "input_ids": input_ids,
+        "attention_mask": attention_mask,
+        "labels": labels,
         "mol_seq": mol_seq,
         "rxn_seq": rxn_seq,
         "atoms": atom_f,

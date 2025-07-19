@@ -36,26 +36,20 @@ with open(_smiles_vocab_path) as f:
     _smiles_token_pattern = re.compile("(" + "|".join(map(re.escape, sorted(_smiles_vocab, reverse=True))) + ")")
 
 
-def tokenize_smiles(s_in: str):
-    tok: list[int] = []
-    for token in _smiles_token_pattern.findall(s_in):
-        tok.append(_smiles_token_to_id.get(token, _smiles_token_max + 1))
-    return tok
-
-
-# ---- Chain-of-Reaction helpers ----
-
 # Special tokens for CoR notation
 # These are reserved_special_token_xxx in the Llama-3 tokenizer
-COR_START = 128000 # <|begin_of_text|>
-COR_END = 128001 # <|end_of_text|>
-COR_MOL_START = 128002
-COR_MOL_END = 128003
-# Reaction tokens occupy 128010 + index (1-based)
-_COR_RXN_OFFSET = 128010
+PAD = 128004 # <|finetune_right_pad_id|>
+BOS = 128000 # <|begin_of_text|>
+EOS = 128001 # <|end_of_text|>
+COR_START = 128002
+COR_END = 128003
+COR_MOL_START = 128005
+COR_MOL_END = 128011
+# Reaction tokens occupy 128011 + index (1-based)
+_COR_RXN_OFFSET = 128011
 
 
-def cor_reaction_token(index: int) -> int:
+def reaction_token(index: int) -> int:
     """Return token id for reaction index."""
     return _COR_RXN_OFFSET + index
 
@@ -69,7 +63,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 
 
-def tokenize_cor_smiles(smi: str) -> list[int]:
+def tokenize_smiles(smi: str) -> list[int]:
     """Tokenize a SMILES string for CoR notation."""
     token_ids: list[int] = [COR_MOL_START]
     for token in _smiles_token_pattern.findall(smi):
