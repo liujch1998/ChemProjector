@@ -1,5 +1,8 @@
 import re
 from pathlib import Path
+import os
+from transformers import AutoTokenizer, logging
+logging.set_verbosity_error()
 
 from rdkit import Chem
 
@@ -43,16 +46,11 @@ def tokenize_smiles(s_in: str):
 # ---- Chain-of-Reaction helpers ----
 
 # Special tokens for CoR notation
-# Use high token IDs so they do not clash with SMILES tokens
-COR_START = 128000
-COR_END = 128001
+# These are reserved_special_token_xxx in the Llama-3 tokenizer
+COR_START = 128000 # <|begin_of_text|>
+COR_END = 128001 # <|end_of_text|>
 COR_MOL_START = 128002
 COR_MOL_END = 128003
-
-# Offset for SMILES tokens within the unified vocabulary
-_COR_SMILES_OFFSET = 4
-
-# Offset for reaction tokens within the unified vocabulary
 # Reaction tokens occupy 128010 + index (1-based)
 _COR_RXN_OFFSET = 128010
 
@@ -62,6 +60,19 @@ def cor_reaction_token(index: int) -> int:
     return _COR_RXN_OFFSET + index
 
 
+tokenizer = AutoTokenizer.from_pretrained(
+    'meta-llama/Llama-3.1-8B',
+    use_auth_token=os.environ['HF_TOKEN'],
+    trust_remote_code=True,
+    add_bos_token=False,
+    add_eos_token=False
+)
+
+
 def tokenize_cor_smiles(smi: str) -> list[int]:
     """Tokenize a SMILES string for CoR notation."""
-    return [COR_MOL_START] + [t + _COR_SMILES_OFFSET for t in tokenize_smiles(smi)] + [COR_MOL_END]
+    token_ids: list[int] = [COR_MOL_START]
+    for token in _smiles_token_pattern.findall(smi):
+        token_ids.extend(tokenizer.encode(token, add_special_tokens=False))
+    token_ids.append(COR_MOL_END)
+    return token_ids
