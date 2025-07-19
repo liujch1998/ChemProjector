@@ -19,15 +19,27 @@ from .collate import (
     collate_padding_masks,
     collate_tokens,
 )
-from .common import ProjectionBatch, ProjectionData, create_data
+from .common import (
+    ProjectionBatch,
+    ProjectionData,
+    create_data,
+    create_cor_data,
+)
 
 
 class Collater:
-    def __init__(self, max_num_atoms: int = 96, max_smiles_len: int = 192, max_num_tokens: int = 24):
+    def __init__(
+        self,
+        max_num_atoms: int = 96,
+        max_smiles_len: int = 192,
+        max_num_tokens: int = 24,
+        use_cor: bool = False,
+    ):
         super().__init__()
         self.max_num_atoms = max_num_atoms
         self.max_smiles_len = max_smiles_len
         self.max_num_tokens = max_num_tokens
+        self.use_cor = use_cor
 
         self.spec_atoms = {
             "atoms": collate_tokens,
@@ -35,12 +47,18 @@ class Collater:
             "atom_padding_mask": collate_padding_masks,
         }
         self.spec_smiles = {"smiles": collate_tokens}
-        self.spec_tokens = {
-            "token_types": collate_tokens,
-            "rxn_indices": collate_tokens,
-            "reactant_fps": collate_1d_features,
-            "token_padding_mask": collate_padding_masks,
-        }
+        if self.use_cor:
+            self.spec_tokens = {
+                "token_ids": collate_tokens,
+                "token_padding_mask": collate_padding_masks,
+            }
+        else:
+            self.spec_tokens = {
+                "token_types": collate_tokens,
+                "rxn_indices": collate_tokens,
+                "reactant_fps": collate_1d_features,
+                "token_padding_mask": collate_padding_masks,
+            }
 
     def __call__(self, data_list: list[ProjectionData]) -> ProjectionBatch:
         data_list_t = cast(list[dict[str, torch.Tensor]], data_list)
@@ -64,6 +82,7 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
         max_num_reactions: int = 5,
         init_stack_weighted_ratio: float = 0.0,
         virtual_length: int = 65536,
+        use_cor: bool = False,
     ) -> None:
         super().__init__()
         self._reaction_matrix = reaction_matrix
@@ -73,6 +92,7 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
         self._fpindex = fpindex
         self._init_stack_weighted_ratio = init_stack_weighted_ratio
         self._virtual_length = virtual_length
+        self._use_cor = use_cor
 
     def __len__(self) -> int:
         return self._virtual_length
@@ -90,14 +110,22 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
                 rxn_seq_full = stack.rxns
                 rxn_idx_seq_full = stack.get_rxn_idx_seq()
                 product = random.choice(list(stack.get_top()))
-                data = create_data(
-                    product=product,
-                    mol_seq=mol_seq_full,
-                    mol_idx_seq=mol_idx_seq_full,
-                    rxn_seq=rxn_seq_full,
-                    rxn_idx_seq=rxn_idx_seq_full,
-                    fpindex=self._fpindex,
-                )
+                if self._use_cor:
+                    data = create_cor_data(
+                        product=product,
+                        mol_seq=mol_seq_full,
+                        rxn_seq=rxn_seq_full,
+                        rxn_idx_seq=rxn_idx_seq_full,
+                    )
+                else:
+                    data = create_data(
+                        product=product,
+                        mol_seq=mol_seq_full,
+                        mol_idx_seq=mol_idx_seq_full,
+                        rxn_seq=rxn_seq_full,
+                        rxn_idx_seq=rxn_idx_seq_full,
+                        fpindex=self._fpindex,
+                    )
                 data["smiles"] = data["smiles"][: self._max_smiles_len]
                 yield data
 
@@ -152,22 +180,30 @@ class ProjectionDataModule(pl.LightningDataModule):
         )
 
     def train_dataloader(self):
+        collate = Collater(
+            max_num_tokens=self.dataset_options.get("max_num_tokens", 24),
+            use_cor=self.dataset_options.get("use_cor", False),
+        )
         return DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             drop_last=True,
-            collate_fn=Collater(),
+            collate_fn=collate,
             worker_init_fn=worker_init_fn,
             persistent_workers=True,
         )
 
     def val_dataloader(self):
+        collate = Collater(
+            max_num_tokens=self.dataset_options.get("max_num_tokens", 24),
+            use_cor=self.dataset_options.get("use_cor", False),
+        )
         return DataLoader(
             self.val_dataset,
             batch_size=self.batch_size,
             num_workers=1,
-            collate_fn=Collater(),
+            collate_fn=collate,
             worker_init_fn=worker_init_fn,
             persistent_workers=True,
         )
