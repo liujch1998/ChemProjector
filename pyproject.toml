@@ -1,3 +1,38 @@
+[project]
+name = "p-chem"
+version = "0.0.1"
+dependencies = [
+    "black>=25.1.0",
+    "click>=8.2.1",
+    "cryptography>=45.0.5",
+    "einops>=0.8.1",
+    "flake8>=7.3.0",
+    "gitpython>=3.1.44",
+    "isort>=6.0.1",
+    "joblib>=1.5.1",
+    "matplotlib>=3.10.3",
+    "mypy>=1.17.0",
+    "numpy>=2.2.6",
+    "omegaconf>=2.3.0",
+    "pandas>=2.3.1",
+    "pre-commit>=4.2.0",
+    "pytorch-lightning>=2.5.2",
+    "pyyaml>=6.0.2",
+    "rdkit>=2023.9",
+    "rich>=14.0.0",
+    "scikit-learn>=1.7.1",
+    "seaborn>=0.13.2",
+    "tensorboard>=2.20.0",
+    "torch>=2.7.1",
+    "tqdm>=4.67.1",
+    "transformers>=4.53.2",
+    "types-pyyaml>=6.0.12.20250516",
+]
+requires-python = "==3.10"
+
+[tool.uv]
+# Optional: to use uv's lock file
+
 [tool.black]
 line-length = 119
 target-version = ['py310']

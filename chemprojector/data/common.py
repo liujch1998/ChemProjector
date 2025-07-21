@@ -11,6 +11,7 @@ from chemprojector.chem.mol import Molecule
 from chemprojector.chem.reaction import Reaction
 from chemprojector.chem.stack import Stack
 from chemprojector.chem.featurize import (
+    PAD,
     BOS,
     EOS,
     COR_END,
@@ -93,12 +94,11 @@ def featurize_stack_actions(
     return feats
 
 
-def featurize_stack(stack: Stack, end_token: bool, fpindex: FingerprintIndex) -> dict[str, torch.Tensor]:
+def featurize_stack(stack: Stack, fpindex: FingerprintIndex, end_token: bool) -> dict[str, torch.Tensor]:
     return featurize_stack_actions(
-        mol_idx_seq=stack.get_mol_idx_seq(),
+        mol_seq=stack.mols,
         rxn_idx_seq=stack.get_rxn_idx_seq(),
         end_token=end_token,
-        fpindex=fpindex,
     )
 
 
@@ -118,19 +118,17 @@ def create_data(
         end_token=True,
     )
 
-    input_tokens = [BOS] + product.tokenize_csmiles()
+    input_tokens = torch.cat([torch.tensor([BOS], dtype=torch.long), product.tokenize_csmiles()])
     if len(input_tokens) > max_input_len: # truncate left
         input_tokens = input_tokens[-max_input_len:]
     if len(input_tokens) < max_input_len: # pad left
-        input_tokens = [PAD] * (max_input_len - len(input_tokens)) + input_tokens
-    input_tokens = torch.tensor(input_tokens, dtype=torch.long)
+        input_tokens = torch.cat([torch.tensor([PAD] * (max_input_len - len(input_tokens)), dtype=torch.long), input_tokens])
 
-    output_tokens = stack_feats["token_ids"] + [EOS]
+    output_tokens = torch.cat([stack_feats["token_ids"], torch.tensor([EOS], dtype=torch.long)])
     if len(output_tokens) > max_output_len: # truncate right
         output_tokens = output_tokens[:max_output_len]
     if len(output_tokens) < max_output_len: # pad right
-        output_tokens = output_tokens + [PAD] * (max_output_len - len(output_tokens))
-    output_tokens = torch.tensor(output_tokens, dtype=torch.long)
+        output_tokens = torch.cat([output_tokens, torch.tensor([PAD] * (max_output_len - len(output_tokens)), dtype=torch.long)])
 
     input_ids = torch.cat([input_tokens, output_tokens], dim=0)
     attention_mask = (input_ids != PAD).to(torch.long)

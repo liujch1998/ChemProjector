@@ -56,7 +56,7 @@ def reaction_token(index: int) -> int:
 
 tokenizer = AutoTokenizer.from_pretrained(
     'meta-llama/Llama-3.1-8B',
-    use_auth_token=os.environ['HF_TOKEN'],
+    token=os.environ['HF_TOKEN'],
     trust_remote_code=True,
     add_bos_token=False,
     add_eos_token=False

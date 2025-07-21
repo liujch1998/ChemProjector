@@ -4,6 +4,8 @@ from typing import Any
 import numpy as np
 import pytorch_lightning as pl
 import torch
+import transformers
+import os
 from omegaconf import OmegaConf
 
 from chemprojector.chem.fpindex import FingerprintIndex
@@ -27,7 +29,7 @@ class ChemProjectorWrapper(pl.LightningModule):
         )
         self.model = transformers.AutoModelForCausalLM.from_pretrained(
             'meta-llama/Llama-3.1-8B-Instruct',
-            use_auth_token=os.environ['HF_TOKEN'],
+            token=os.environ['HF_TOKEN'],
         )
 
     @property
@@ -60,7 +62,7 @@ class ChemProjectorWrapper(pl.LightningModule):
         return optimizer
 
     def training_step(self, batch: ProjectionBatch, batch_idx: int):
-        loss = self.model(batch).loss
+        loss = self.model(**batch).loss
         # loss_dict, aux_dict = self.model.get_loss_shortcut(batch, warmup=self.current_epoch == 0)
         # loss_sum = sum_weighted_losses(loss_dict, self.config.train.loss_weights)
 
@@ -77,7 +79,12 @@ class ChemProjectorWrapper(pl.LightningModule):
         return loss
 
     def validation_step(self, batch: ProjectionBatch, batch_idx: int) -> Any:
-        loss = self.model(batch).loss
+        # print('input_ids:', batch['input_ids'].size(), batch['input_ids'].tolist())
+        # print('attention_mask:', batch['attention_mask'].size(), batch['attention_mask'].tolist())
+        # print('labels:', batch['labels'].size(), batch['labels'].tolist())
+        # exit()
+
+        loss = self.model(**batch).loss
         # loss_dict, _ = self.model.get_loss_shortcut(batch)
         # loss_weight = self.config.train.get("val_loss_weights", self.config.train.loss_weights)
         # loss_sum = sum_weighted_losses(loss_dict, loss_weight)

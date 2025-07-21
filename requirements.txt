@@ -1,0 +1,39 @@
+# Bioinformatics
+rdkit>=2023.09
+# openbabel
+
+# Deep learning
+torch  # Will install CPU version; see note below for CUDA
+# nvidia-pyindex
+# nvidia-cuda-runtime-cu12==12.4.*
+tensorboard
+einops
+pytorch-lightning
+scikit-learn
+
+# Data processing
+numpy
+pandas
+
+# IO
+pyyaml
+types-pyyaml
+joblib
+omegaconf
+gitpython
+cryptography
+
+# Visualization
+matplotlib
+seaborn
+tqdm
+click
+rich
+
+# Linting and Dev tools
+mypy
+flake8
+black
+isort
+pre-commit
+GitPython

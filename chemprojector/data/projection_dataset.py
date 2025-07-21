@@ -51,9 +51,9 @@ class Collater:
     def __call__(self, data_list: list[ProjectionData]) -> ProjectionBatch:
         # data_list_t = cast(list[dict[str, torch.Tensor]], data_list)
         batch = {
-            "input_ids": torch.stack([d.input_ids for d in data_list], dim=0),
-            "attention_mask": torch.stack([d.attention_mask for d in data_list], dim=0),
-            "labels": torch.stack([d.labels for d in data_list], dim=0),
+            "input_ids": torch.stack([d["input_ids"] for d in data_list], dim=0),
+            "attention_mask": torch.stack([d["attention_mask"] for d in data_list], dim=0),
+            "labels": torch.stack([d["labels"] for d in data_list], dim=0),
             # **apply_collate(self.spec_atoms, data_list_t, max_size=self.max_num_atoms),
             # **apply_collate(self.spec_smiles, data_list_t, max_size=self.max_smiles_len),
             # **apply_collate(self.spec_tokens, data_list_t, max_size=self.max_num_tokens),
