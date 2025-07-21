@@ -5,6 +5,7 @@ import pytorch_lightning as pl
 import torch
 from omegaconf import OmegaConf
 from pytorch_lightning import callbacks, loggers, strategies
+from pytorch_lightning.loggers import WandbLogger
 
 from chemprojector.data.projection_dataset import ProjectionDataModule
 from chemprojector.models.wrapper import ChemProjectorWrapper
@@ -31,6 +32,7 @@ torch.set_float32_matmul_precision("medium")
 @click.option("--num-sanity-val-steps", type=int, default=1)
 @click.option("--log-dir", type=click.Path(dir_okay=True, file_okay=False), default="./logs")
 @click.option("--resume", type=click.Path(exists=True, dir_okay=False), default=None)
+@click.option("--config-name", type=str, default=None)
 def main(
     config_path: str,
     seed: int,
@@ -51,7 +53,8 @@ def main(
     pl.seed_everything(seed)
 
     config = OmegaConf.load(config_path)
-    config_name = get_config_name(config_path)
+    if config_name is None:
+        config_name = get_config_name(config_path)
     vc_info = get_vc_info()
     vc_info.disallow_changes(debug)
     exp_name = get_experiment_name(config_name, vc_info.display_version, vc_info.committed_at)
@@ -83,9 +86,7 @@ def main(
             callbacks.ModelCheckpoint(save_last=True, monitor="val/loss", mode="min", save_top_k=5),
             callbacks.LearningRateMonitor(logging_interval="step"),
         ],
-        logger=[
-            loggers.TensorBoardLogger(log_dir, name=exp_name, version=exp_ver),
-        ],
+        logger=WandbLogger(project="p-chem", name=f"{exp_name}_{exp_ver}", save_dir=log_dir),
         val_check_interval=config.train.val_freq,
         limit_val_batches=4,
     )
