@@ -73,9 +73,10 @@ def main(
         accelerator="gpu",
         devices=devices,
         num_nodes=num_nodes,
-        strategy=strategies.DDPStrategy(static_graph=True),
+        strategy=strategies.FSDPStrategy(sharding_strategy="FULL_SHARD", state_dict_type="full"),
         num_sanity_val_steps=num_sanity_val_steps,
         gradient_clip_val=config.train.max_grad_norm,
+        gradient_clip_algorithm="value",
         log_every_n_steps=1,
         max_steps=config.train.max_iters,
         callbacks=[

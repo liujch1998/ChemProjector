@@ -1,5 +1,5 @@
 import pickle
-from typing import Any
+from typing import Any, Optional, Union
 
 import numpy as np
 import pytorch_lightning as pl
@@ -114,3 +114,12 @@ class ChemProjectorWrapper(pl.LightningModule):
         #             )
 
         return loss
+
+    # def configure_gradient_clipping(
+    #     self,
+    #     optimizer,
+    #     gradient_clip_val: Optional[Union[int, float]] = None,
+    #     gradient_clip_algorithm: Optional[str] = None,
+    # ):
+    #     assert gradient_clip_algorithm in ('norm', None), gradient_clip_algorithm
+    #     self.model.clip_grad_norm_(gradient_clip_val)
