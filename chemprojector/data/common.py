@@ -1,12 +1,13 @@
 import enum
 from collections.abc import Sequence
-from typing import TypedDict
+from typing import TypedDict, List
 
 import numpy as np
 
 import torch
 
 from chemprojector.chem.fpindex import FingerprintIndex
+from chemprojector.chem.matrix import ReactantReactionMatrix
 from chemprojector.chem.mol import Molecule
 from chemprojector.chem.reaction import Reaction
 from chemprojector.chem.stack import Stack
@@ -18,10 +19,12 @@ from chemprojector.chem.featurize import (
     COR_MOL_END,
     COR_MOL_START,
     COR_START,
+    _COR_RXN_OFFSET,
+    tokenizer,
     reaction_token,
     tokenize_smiles,
 )
-from chemprojector.utils.image import draw_text, make_grid
+from chemprojector.utils.image import draw_text, make_grid, make_row
 
 
 class TokenType(enum.IntEnum):
@@ -148,6 +151,48 @@ def create_data(
         "token_padding_mask": stack_feats["token_padding_mask"],
     }
     return data
+
+
+def draw_input(input_ids: List[int]):
+    # input_ids includes MOL_START and MOL_END
+    smiles = ''
+    assert input_ids[0] == COR_MOL_START
+    assert input_ids[-1] == COR_MOL_END
+    for i in input_ids[1:-1]:
+        smiles += tokenizer.decode(i).lstrip(' ')
+    mol = Molecule(smiles)
+    im = mol.draw(size=256)
+    return im
+
+
+def draw_output(output_ids: List[int], rxn_matrix: ReactantReactionMatrix):
+    # output_ids includes COR_START and COR_END
+    # this function does not check if the reaction can be applied to the current stack
+    im_list = []
+    assert output_ids[0] == COR_START
+    assert output_ids[-1] == COR_END
+    cur_mol = None
+    for i in output_ids[1:-1]:
+        assert i not in [PAD, BOS, EOS, COR_START, COR_END]
+        if i == COR_MOL_START:
+            assert cur_mol is None
+            cur_mol = ''
+        elif i == COR_MOL_END:
+            assert cur_mol is not None
+            mol = Molecule(cur_mol)
+            im_list.append(mol.draw(size=256))
+            cur_mol = None
+        elif i > _COR_RXN_OFFSET:
+            rxn_idx = i - _COR_RXN_OFFSET
+            # assert rxn_idx <= len(rxn_matrix.reactions)
+            # rxn = rxn_matrix.reactions[rxn_idx]
+            # im_list.append(rxn.draw(size=256))
+            im_list.append(draw_text(f'RXN:{rxn_idx}', W=256, H=256, size=64))
+        else:
+            assert cur_mol is not None
+            cur_mol += tokenizer.decode(i).lstrip(' ')
+    assert cur_mol is None
+    return make_row(im_list)
 
 
 def draw_data(data: ProjectionData):

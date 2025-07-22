@@ -33,6 +33,7 @@ torch.set_float32_matmul_precision("medium")
 @click.option("--log-dir", type=click.Path(dir_okay=True, file_okay=False), default="./logs")
 @click.option("--resume", type=click.Path(exists=True, dir_okay=False), default=None)
 @click.option("--config-name", type=str, default=None)
+@click.option("--base-model", type=str, default="llama3.1-8b-inst")
 def main(
     config_path: str,
     seed: int,
@@ -44,6 +45,8 @@ def main(
     num_sanity_val_steps: int,
     log_dir: str,
     resume: str | None,
+    config_name: str | None,
+    base_model: str,
 ):
     if batch_size % devices != 0:
         raise ValueError("Batch size must be divisible by the number of devices")
@@ -69,14 +72,14 @@ def main(
     )
 
     # Model
-    model = ChemProjectorWrapper(config)
+    model = ChemProjectorWrapper(config, base_model)
 
     # Train
     trainer = pl.Trainer(
         accelerator="gpu",
         devices=devices,
         num_nodes=num_nodes,
-        strategy=strategies.FSDPStrategy(sharding_strategy="FULL_SHARD", state_dict_type="full"),
+        strategy=strategies.DDPStrategy() if devices == 1 else strategies.FSDPStrategy(sharding_strategy="FULL_SHARD", state_dict_type="full"),
         num_sanity_val_steps=num_sanity_val_steps,
         gradient_clip_val=config.train.max_grad_norm,
         gradient_clip_algorithm="value",
@@ -86,7 +89,7 @@ def main(
             callbacks.ModelCheckpoint(save_last=True, monitor="val/loss", mode="min", save_top_k=5),
             callbacks.LearningRateMonitor(logging_interval="step"),
         ],
-        logger=WandbLogger(project="p-chem", name=f"{exp_name}_{exp_ver}", save_dir=log_dir),
+        logger=WandbLogger(project="p-chem", group=config_name, name=f"{exp_name}_{exp_ver}", save_dir=log_dir),
         val_check_interval=config.train.val_freq,
         limit_val_batches=4,
     )

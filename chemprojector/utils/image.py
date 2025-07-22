@@ -25,6 +25,28 @@ def make_grid(images: list[Image.Image]) -> Image.Image:
     return grid
 
 
+def make_row(images: list[Image.Image]) -> Image.Image:
+    """Make a row of images.
+
+    Args:
+        images (list[PIL.Image.Image]): A list of images.
+
+    Returns:
+        PIL.Image.Image: A row of images.
+    """
+    width = max(image.size[0] for image in images)
+    height = max(image.size[1] for image in images)
+
+    num_cols = len(images)
+    num_rows = 1
+    grid = Image.new("RGB", (num_cols * width, num_rows * height), color=(255, 255, 255))
+    for i, image in enumerate(images):
+        x = width * i
+        y = 0
+        grid.paste(image, (x, y))
+    return grid
+
+
 def draw_text(
     message: str,
     W: int = 100,
@@ -34,7 +56,7 @@ def draw_text(
 ) -> Image.Image:
     image = Image.new("RGB", (W, H), color=bg_color)
     draw = ImageDraw.Draw(image)
-    font = ImageFont.truetype("Pillow/Tests/fonts/FreeMono.ttf", size)
+    font = ImageFont.truetype("DejaVuSansMono.ttf", size)
     _, _, w, h = draw.textbbox((0, 0), message, font=font)
     draw.text(((W - w) / 2, (H - h) / 2), message, font=font)
     return image
